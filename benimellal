@@ -1,0 +1,88 @@
+import re
+import requests
+from bs4 import BeautifulSoup
+from csv import writer
+print("0 : Appartements")
+print("1 : Terrains")
+print("2 : Villas")
+print("3 : Maisons")
+print("4 : Locaux")
+print("5 : Bureaux")
+k = int(input("Entrer un chiffre de 0 à 5 : "))
+if k not in [0,1,2,3,4,5] : print("Veuillez entrer un chiffre valide !")
+else :
+    villes0 = ["rabat","salé","temara","casablanca","kénitra","mohammedia"]
+    villes1 = ["béni-mellal"]
+    villes2 = ["rabat","temara","casablanca","dar-bouazza","bouskoura"]
+    villes3 = ["rabat","casablanca","salé"]
+    villes4 = ["rabat","casablanca"]
+    villes5 = ["casablanca"]
+    ensemble_villes = [villes0,villes1,villes2,villes3,villes4,villes5]
+    genres = ["appartements-a-vendre","terrains-a-vendre","villas-et-maisons-de-luxe-a-vendre","maisons-a-vendre","locaux-a-vendre","bureaux-et-commerces-a-vendre"]
+    with open(f"{genres[k]}.csv", "w", encoding = 'utf16', newline = '') as f :
+            thewriter = writer(f)
+            header = ["titre", "chambre","surface", "prix","ville", "arrondissement","genre", "date","description","link","image", "Lat", "Long"]
+            thewriter.writerow(header)
+    agent = {"User-Agent":"Mozilla/5.0"}
+    print(genres[k])
+    for ville in ensemble_villes[k] : 
+        url = f"https://www.mubawab.ma/fr/st/{ville}/{genres[k]}"
+        page = requests.get(url, headers=agent)
+        soup = BeautifulSoup(page.content, 'html.parser')
+        nb_page = soup.find('p', class_="fSize11 centered").text
+        a = re.search(r'\b(résultats)\b', nb_page)
+        b = re.search(r'\b(pages)\b', nb_page)
+        nb_page = nb_page[a.start() + 14 : b.start() - len(nb_page) - 1]
+        print(ville)        
+        for i in range(1,int(nb_page)) :        
+            url = f"https://www.mubawab.ma/fr/st/{ville}/{genres[k]}:p:{i}"
+            print(url)
+            page = requests.get(url, headers=agent)
+            soup = BeautifulSoup(page.content, 'html.parser')
+            lists = soup.find_all('li', class_="listingBox w100")
+            with open(f"{genres[k]}.csv", "a", encoding = 'utf16', newline = '') as f :
+                thewriter = writer(f)
+                for list in lists :
+                    image = list.find('img', class_="w100 sliderImage firstPicture")
+                    if image == None : image = "link not find"
+                    else : image = image['src']
+                    titre = getattr(list.find('h2', class_="listingTit"), 'text', None)
+                    contenance = getattr(list.find('h4', class_="listingH4 floatR"), 'text', None)
+                    arrondissement = getattr(list.find('h3', class_="listingH3"), 'text', None)
+                    date = getattr(list.find('span', class_="listingDetails iconPadR"), 'text', None)
+                    description = getattr(list.find('p', class_="listingP descLi"), 'text', None)
+                    prix = getattr(list.find('span', class_="priceTag hardShadow float-right floatL yellowBg"), 'text', None)
+                    if description != None : description = description.replace('\n','').replace('\t','')
+                    if titre != None : titre = titre.replace('\n','').replace('\t','')
+                    if contenance != None : 
+                        contenance = contenance.replace('\n','').replace('\t','')
+                    else : contenance = getattr(list.find('p', class_="listingH4 floatR"), 'text', None)
+                    if contenance != None : contenance = contenance.replace('\n','').replace('\t','')
+                    if arrondissement != None : arrondissement = arrondissement.replace('\n','').replace('\t','')
+                    if date != None : date = date.replace('\n','').replace('\t','')
+                    if prix != None : 
+                        prix = prix.replace('\n','').replace('\t','')
+                    else : prix = getattr(list.find('span', class_="priceTag hardShadow float-right floatL"), 'text', None)
+                    if prix != None : prix = prix.replace('\n','').replace('\t','')
+                    link = list.get("linkref")
+                    page1 = requests.get(link, headers=agent)
+                    soup1 = BeautifulSoup(page1.content, 'html.parser')
+                    #print(soup1)
+                    #lists1 = soup1.find('div', class_="blockProp mapBlockProp")
+                    lists1 = soup1.find('div', class_="blockProp mapBlockProp")
+                    #print(lists1)
+                    script_loc = getattr(lists1.find('script'), 'text', None)
+                    a = re.search(r'\b(ll=)\b', script_loc)
+                    b = re.search(r'\b(zoom)\b', script_loc)
+                    if a != None and b != None :
+                        link_loc = script_loc[a.start() + 3 :b.start() + 7]
+                        coordonnates = link_loc[-47:-9]
+                        coord = coordonnates.split('%2C')
+                    if contenance != None : 
+                      contenance1 = contenance.split(', ')
+                      if len(contenance1) == 2 and coord[0] != 0:
+                          info = [titre, contenance1[0], contenance1[1], prix,ville, arrondissement,genres[k],date,description, link,image, coord[0],coord[1]]
+                          thewriter.writerow(info)
+                      elif len(contenance1) == 1 and coord[0] != 0:
+                          info = [titre,"Pas d'info",contenance1[0], prix,ville, arrondissement,genres[k],date,description, link,image, coord[0],coord[1]]
+                          thewriter.writerow(info)
